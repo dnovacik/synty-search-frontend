@@ -7,6 +7,7 @@ import { ThemeProvider } from 'styled-components'
 
 // theme
 import theme from './theme/theme'
+import Globalstyle from './theme/globalStyle'
 
 // style
 import 'sanitize.css'
@@ -19,6 +20,7 @@ import { MainRouter } from './router'
 const AppRoot = (): JSX.Element => {
   return (
     <ThemeProvider theme={theme}>
+      <Globalstyle />
       <App.Layout>
         <MainRouter />
       </App.Layout>
@@ -31,8 +33,9 @@ const App = {
     height: 100vh;
     display: flex;
     flex-direction: row;
+    font-family: ${props => props.theme.font.familyRegular};
     background-color: ${props => props.theme.colors.background};
-    color: ${props => props.theme.colors.light['shade-1']};
+    color: ${props => props.theme.colors.black};
   `
 }
 
