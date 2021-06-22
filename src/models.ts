@@ -1,5 +1,5 @@
 export interface SearchResponse extends IBaseResponse {
-  data: Array<Prefab>
+  data: Array<IPrefab>
 }
 
 export interface IBaseResponse {
@@ -7,14 +7,11 @@ export interface IBaseResponse {
   message?: string
 }
 
-export interface Prefab extends IPrefab{
-  isActive: boolean
-}
-
 export interface IPrefab {
   name: string
   pack: string
   type: string
   imagePath: string
+  packStoreUrl: string
   keywords: Array<string>
 }

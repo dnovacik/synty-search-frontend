@@ -1,9 +1,10 @@
 // libs
 import React, { useState } from 'react'
+import ReactModal from 'react-modal'
 import { SwitchTransition, CSSTransition } from 'react-transition-group'
 import Styled, { css } from 'styled-components'
-import { IPrefab, Prefab } from '../../models';
-import { getPrefabs } from '../../prefabService'
+import { IPrefab } from '../../models';
+import { getPrefabs, groupBy } from '../../prefabService'
 
 import logo from './../../assets/logo.png'
 
@@ -16,10 +17,12 @@ interface LoaderProps {
   fetching: boolean
 }
 
+ReactModal.setAppElement('#root')
+
 const HomeView = (): JSX.Element => {
   const [query, setQuery] = useState<string>('')
   const [isFetching, setIsFetching] = useState<boolean>(false)
-  const [prefabs, setPrefabs] = useState<Array<IPrefab>>([])
+  const [prefabs, setPrefabs] = useState<{ [key: string]: Array<IPrefab> } | null>(null)
   const [activePrefab, setActivePrefab] = useState<IPrefab | null>(null)
 
   const handleSearchClicked = async () => {
@@ -28,10 +31,47 @@ const HomeView = (): JSX.Element => {
     const response = await getPrefabs(query)
 
     if (response.data && response.data.success) {
-      setPrefabs(response.data.data)
+      setPrefabs(groupBy(response.data.data, (x: IPrefab) => x.pack))
     }
 
     setIsFetching(false)
+  }
+
+  const renderLoader = () => {
+    return (
+      <Home.Loader>
+        <Home.Logo fetching={isFetching} src={logo} />
+      </Home.Loader>
+    )
+  }
+
+  const renderPrefabs = () => {
+    return (
+      <>
+        {prefabs &&
+          Object.entries(prefabs).map(([key, value]) =>
+            <Home.PrefabsWrapper key={`wrapper-${key}`}>
+              <Home.PrefabsTypeTitle>{key}</Home.PrefabsTypeTitle>
+              <Home.PrefabsRow>
+                {
+                  value.map((prefab, index) =>
+                    <Home.PrefabBox key={`prefab-${index}`} isActive={activePrefab === prefab}
+                      onClick={activePrefab === prefab ? () => setActivePrefab(null) : () => setActivePrefab(prefab)}
+                      imagePath={`http://localhost:4040/${prefab.imagePath}`}>
+                      <Home.PrefabMetaData>
+                        <span>{prefab.type}</span>
+                        <span>{prefab.name}</span>
+                        <Home.PrefabPackLink href={prefab.packStoreUrl} target='_blank'>{prefab.pack}</Home.PrefabPackLink>
+                      </Home.PrefabMetaData>
+                    </Home.PrefabBox>
+                  )
+                }
+              </Home.PrefabsRow>
+            </Home.PrefabsWrapper>
+          )
+        }
+      </>
+    )
   }
 
   return (
@@ -51,52 +91,32 @@ const HomeView = (): JSX.Element => {
             timeout={150}>
             {
               isFetching
-                ? (
-                  <Home.Loader>
-                    <Home.Logo fetching={isFetching} src={logo} />
-                  </Home.Loader>
-                )
-                : (
-                  <Home.PrefabsWrapper>
-                    {
-                      prefabs.map((prefab, index) => {
-                        return (
-                          <Home.PrefabBox key={`prefab-${index}`} isActive={activePrefab === prefab}
-                            onClick={activePrefab === prefab ? () => setActivePrefab(null) : () => setActivePrefab(prefab)}
-                            imagePath={`http://localhost:4040/${prefab.imagePath}`}>
-                            <Home.PrefabMetaData>
-                              {/* <span>{prefab.name}</span> */}
-                              <span>{prefab.type}</span>
-                              <span>{prefab.pack}</span>
-                            </Home.PrefabMetaData>
-                          </Home.PrefabBox>
-                        )
-                      })
-                    }
-                  </Home.PrefabsWrapper>
-                )
+                ? renderLoader()
+                : renderPrefabs()
             }
           </Home.Transition>
         </Home.SwitchTransition>
-        {
-          activePrefab &&
-            <Home.Details>
-              <Home.DetailsRow>
-                <Home.DetailsHeader>Prefab Name:</Home.DetailsHeader>
-                <Home.DetailsValue>{activePrefab.name.slice(0, -4)}</Home.DetailsValue>
-              </Home.DetailsRow>
-              <Home.DetailsRow>
-                <Home.DetailsHeader>Pack Name:</Home.DetailsHeader>
-                <Home.DetailsValue>{activePrefab.pack}</Home.DetailsValue>
-              </Home.DetailsRow>
-              <Home.DetailsRow>
-                <Home.DetailsHeader>Prefab Type:</Home.DetailsHeader>
-                <Home.DetailsValue>{activePrefab.type}</Home.DetailsValue>
-              </Home.DetailsRow>
-            </Home.Details>
-        }
-
       </Home.Bottom>
+      {/* {
+        activePrefab &&
+        <Home.Details
+          isOpen={activePrefab !== null}
+          onRequestClose={() => setActivePrefab(null)}
+          shouldCloseOnOverlayClick={true}>
+          <Home.DetailsRow>
+            <Home.DetailsHeader>Prefab Name:</Home.DetailsHeader>
+            <Home.DetailsValue>{activePrefab.name.slice(0, -4)}</Home.DetailsValue>
+          </Home.DetailsRow>
+          <Home.DetailsRow>
+            <Home.DetailsHeader>Pack Name:</Home.DetailsHeader>
+            <Home.DetailsValue>{activePrefab.pack}</Home.DetailsValue>
+          </Home.DetailsRow>
+          <Home.DetailsRow>
+            <Home.DetailsHeader>Prefab Type:</Home.DetailsHeader>
+            <Home.DetailsValue>{activePrefab.type}</Home.DetailsValue>
+          </Home.DetailsRow>
+        </Home.Details>
+      } */}
     </Home.Layout >
   );
 };
@@ -108,6 +128,7 @@ const Home = {
   height: 100%;
   flex-direction: column;
   align-items: center;
+  position: relative;
   `,
   Top: Styled.div`
   display: flex;
@@ -119,6 +140,7 @@ const Home = {
   flex-direction: column;
   `,
   Bottom: Styled.div`
+  margin-top: 50px;
   display: flex;
   width: 100%;
   height: 70%;
@@ -127,23 +149,24 @@ const Home = {
   justify-content: space-between;
   align-items: center;
   `,
-  Details: Styled.div`
+  Details: Styled(ReactModal)`
   display: flex;
-  width: 400px;
-  height: 100px;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  padding: 0 20px;
+  width: 75%;
+  height: 75%;
   flex-direction: column;
-  justify-content: center;
+  justify-content: space-between;
   align-items: space-between;
   background-color: ${props => props.theme.colors.background};
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border: 1px solid ${props => props.theme.colors.black};
   `,
   DetailsRow: Styled.div`
   display: flex;
   flex-direction: row;
-  justify-content: space-between;
+  justify-content: space-evenly;
   `,
   DetailsHeader: Styled.span`
   display: flex;
@@ -156,7 +179,7 @@ const Home = {
   color: ${props => props.theme.colors.black};
   font-size: ${props => props.theme.font.size.smaller};
   `,
-  Title: Styled.h2`
+  Title: Styled.h1`
   display: flex;
   color: ${props => props.theme.colors.black};
   `,
@@ -200,6 +223,20 @@ const Home = {
   PrefabsWrapper: Styled.div`
   display: flex;
   width: 90%;
+  flex-direction: column;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 50px;
+  `,
+  PrefabsTypeTitle: Styled.h2`
+  display: flex;
+  color: ${props => props.theme.colors.black};
+  margin-bottom: 20px;
+  align-self: center;
+  `,
+  PrefabsRow: Styled.div`
+  display: flex;
+  width: 100%;
   flex-direction: row;
   flex-wrap: wrap;
   justify-content: center;
@@ -207,18 +244,23 @@ const Home = {
   PrefabBox: Styled.div<PrefabProps>`
   display: flex;
   width: 200px;
-  height: 200px;
+  height: 250px;
   background-image: url(${props => props.imagePath});
   background-repeat: no-repeat;
-  background-size: contain;
+  background-size: 200px 200px;
   position: relative;
-  margin-right: 15px;
-  margin-bottom: 15px;
+  margin-right: 20px;
+  margin-bottom: 30px;
   border-radius: 5px;
   cursor: pointer;
+  transition: all .2s;
 
   &:hover {
     filter: drop-shadow(0 0 0.75rem ${props => props.theme.colors.yellow});
+
+    a {
+      color: ${props => props.theme.colors.yellow};
+    }
   }
 
   ${props => props.isActive && css`
@@ -227,7 +269,7 @@ const Home = {
   `,
   PrefabMetaData: Styled.div`
   display: flex;
-  width: 200px;
+  width: 100%;
   height: 100px;
   position: absolute;
   bottom: 0;
@@ -237,6 +279,21 @@ const Home = {
   font-weight: bold;
   align-items: flex-end;
   justify-content: flex-end;
+  `,
+  PrefabPackLink: Styled.a`
+  display: flex;
+  text-decoration: none;
+  color: ${props => props.theme.colors.black};
+  transition: all .2s;
+
+  &:visited, :active {
+    text-decoration: none;
+    color: ${props => props.theme.colors.black};
+  }
+
+  &:hover {
+    color: ${props => props.theme.colors.yellow};
+  }
   `,
   Loader: Styled.div`
   display: flex;
