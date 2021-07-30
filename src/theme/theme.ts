@@ -8,6 +8,7 @@ export default {
   font: {
     familyRegular: 'Montserrat',
     size: {
+      micro: '10px',
       smallest: '12px',
       smaller: '14px',
       smallLess: '16px',

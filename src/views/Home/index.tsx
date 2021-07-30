@@ -1,10 +1,13 @@
 // libs
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import ReactModal from 'react-modal'
 import { SwitchTransition, CSSTransition } from 'react-transition-group'
 import Styled, { css } from 'styled-components'
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
+import { faHeart, faCoffee, faChevronDown, /*faExternalLinkAlt, faSlidersH */} from '@fortawesome/free-solid-svg-icons'
 import { IPrefab } from '../../models';
-import { getPrefabs, groupBy } from '../../prefabService'
+import { getPrefabs, groupPrefabs } from '../../services/prefabService'
 
 import logo from './../../assets/logo.png'
 
@@ -13,28 +16,84 @@ interface PrefabProps {
   isActive: boolean
 }
 
+interface PrefabRowProps {
+  isActive: boolean
+}
+
+interface PrefabArrowProps {
+  isLeft: boolean
+  isDisabled: boolean
+  isActive: boolean
+}
+
 interface LoaderProps {
   fetching: boolean
+}
+
+interface PrefabsWrapper {
+  [key: string]: {
+    prefabs: Array<IPrefab>
+    active: boolean
+    page: number
+  }
 }
 
 ReactModal.setAppElement('#root')
 
 const HomeView = (): JSX.Element => {
-  const [query, setQuery] = useState<string>('')
+  const { searchParam } = useParams<{ searchParam: string }>()
+  const [query, setQuery] = useState<string>(searchParam || '')
   const [isFetching, setIsFetching] = useState<boolean>(false)
-  const [prefabs, setPrefabs] = useState<{ [key: string]: Array<IPrefab> } | null>(null)
+  const [prefabs, setPrefabs] = useState<PrefabsWrapper | null>(null)
   const [activePrefab, setActivePrefab] = useState<IPrefab | null>(null)
+
+  useEffect(() => {
+    if (query) {
+      handleSearchClicked()
+    }
+  }, [searchParam])
 
   const handleSearchClicked = async () => {
     setActivePrefab(null)
     setIsFetching(true)
-    const response = await getPrefabs(query)
 
-    if (response.data && response.data.success) {
-      setPrefabs(groupBy(response.data.data, (x: IPrefab) => x.pack))
+    if (query) {
+      if (query.length < 3) {
+        handleQueryTooShort()
+      } else {
+        const response = await getPrefabs(query)
+
+        if (response.data) {
+          if (response.data.success) {
+            setPrefabs(groupPrefabs(response.data.data))
+          } else {
+            handleQueryTooShort()
+          }
+        }
+      }
     }
 
     setIsFetching(false)
+  }
+
+  const handleQueryTooShort = () => {
+    console.log('Minimum characters for a query is 3')
+  }
+
+  const onKeyPressedSearch = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.code == 'Enter') {
+      handleSearchClicked()
+      event.currentTarget.blur()
+    }
+  }
+
+  const togglePrefabPack = (pack: string) => {
+    if (prefabs) {
+      const edited = { ...prefabs }
+      edited[pack].active = !edited[pack].active
+
+      setPrefabs(edited)
+    }
   }
 
   const renderLoader = () => {
@@ -50,18 +109,28 @@ const HomeView = (): JSX.Element => {
       <>
         {prefabs &&
           Object.entries(prefabs).map(([key, value]) =>
-            <Home.PrefabsWrapper key={`wrapper-${key}`}>
-              <Home.PrefabsTypeTitle>{key}</Home.PrefabsTypeTitle>
-              <Home.PrefabsRow>
+            <Home.PrefabsWrapper key={`wrapper-${key}`} isActive={value.active}>
+              <Home.PrefabsPackWrapper isActive={value.active} onClick={() => togglePrefabPack(key)}>
+                <Home.PrefabsTypeTitle>{`${key} (${value.prefabs.length})`}</Home.PrefabsTypeTitle>
+                <Home.PrefabsTypeChevron isActive={value.active}>
+                  <Home.Icon icon={faChevronDown} />
+                </Home.PrefabsTypeChevron>
+              </Home.PrefabsPackWrapper>
+              <Home.PrefabsRow isActive={value.active}>
                 {
-                  value.map((prefab, index) =>
-                    <Home.PrefabBox key={`prefab-${index}`} isActive={activePrefab === prefab}
-                      onClick={activePrefab === prefab ? () => setActivePrefab(null) : () => setActivePrefab(prefab)}
+                  value.prefabs.map((prefab, index) =>
+                    <Home.PrefabBox href={prefab.packStoreUrl} target='_blank' key={`prefab-${index}`} isActive={activePrefab === prefab}
                       imagePath={`http://localhost:4040/${prefab.imagePath}`}>
+                        {/* <Home.PrefabLinksWrapper className='links'>
+                          <Home.Icon icon={faSlidersH} onClick={activePrefab === prefab ? () => setActivePrefab(null) : () => setActivePrefab(prefab)}/>
+                          <Home.Link >
+                            <Home.IconBigger icon={faExternalLinkAlt} size='lg' />
+                          </Home.Link>
+                        </Home.PrefabLinksWrapper> */}
                       <Home.PrefabMetaData>
                         <span>{prefab.type}</span>
                         <span>{prefab.name}</span>
-                        <Home.PrefabPackLink href={prefab.packStoreUrl} target='_blank'>{prefab.pack}</Home.PrefabPackLink>
+                        <span>{prefab.pack}</span>
                       </Home.PrefabMetaData>
                     </Home.PrefabBox>
                   )
@@ -78,7 +147,7 @@ const HomeView = (): JSX.Element => {
     <Home.Layout>
       <Home.Top>
         <Home.Title>Synty Search</Home.Title>
-        <Home.Input value={query} onChange={(e) => setQuery(e.currentTarget.value)}></Home.Input>
+        <Home.Input value={query} onChange={(e) => setQuery(e.currentTarget.value)} onKeyUp={(e) => onKeyPressedSearch(e)}></Home.Input>
         <Home.Search onClick={() => handleSearchClicked()}>Search</Home.Search>
       </Home.Top>
       <Home.Bottom>
@@ -90,14 +159,31 @@ const HomeView = (): JSX.Element => {
             component="div"
             timeout={150}>
             {
-              isFetching
+              isFetching && prefabs
                 ? renderLoader()
                 : renderPrefabs()
             }
           </Home.Transition>
         </Home.SwitchTransition>
       </Home.Bottom>
-      {/* {
+      <Home.Footer>
+        <Home.FooterRow>
+          by community to community
+        </Home.FooterRow>
+        {/* <Home.FooterRow>
+          you can show me some <Home.Icon icon={faHeart} /> and buy me a
+          <Home.Link href={'https://www.paypal.com/donate/?business=novacik.daniel%40gmail.com&no_recurring=0&currency_code=EUR'} target='_blank'>
+            <Home.Icon icon={faCoffee} />
+          </Home.Link>
+        </Home.FooterRow> */}
+        <Home.FooterSignature>
+          made with <Home.Icon icon={faHeart} color='red' /> by
+          <Home.Link href={'https://cognision.eu'} target='_blank'>@ra6e</Home.Link>
+          {' & '} 
+          <Home.Link href={'https://twitter.com/MegaMileyMakes'} target='_blank'>@MegaMiley</Home.Link>
+        </Home.FooterSignature>
+      </Home.Footer>
+      {
         activePrefab &&
         <Home.Details
           isOpen={activePrefab !== null}
@@ -116,7 +202,7 @@ const HomeView = (): JSX.Element => {
             <Home.DetailsValue>{activePrefab.type}</Home.DetailsValue>
           </Home.DetailsRow>
         </Home.Details>
-      } */}
+      }
     </Home.Layout >
   );
 };
@@ -127,32 +213,84 @@ const Home = {
   width: 100%;
   height: 100%;
   flex-direction: column;
-  align-items: center;
   position: relative;
   `,
   Top: Styled.div`
   display: flex;
   width: 100%;
-  height: 30%;
+  height: 200px;
   transition: all .2s;
   align-items: center;
   justify-content: center;
   flex-direction: column;
+  position: fixed;
+  left: 0;
+  top: 0;
+  background: #fff;
+  z-index: 1002;
   `,
   Bottom: Styled.div`
-  margin-top: 50px;
+  margin-top: 200px;
   display: flex;
   width: 100%;
-  height: 70%;
+  height: calc(100vh - 325px);
+  overflow-y: scroll;
   transition: all .2s;
   flex-direction: column;
-  justify-content: space-between;
   align-items: center;
+  margin-bottom: 125px;
+  `,
+  Footer: Styled.div`
+  display: flex;
+  width: 100%;
+  height: 125px;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  margin-top: 25px;
+  background: #fff;
+  z-index: 1002;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  `,
+  FooterRow: Styled.div`
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  font-size: ${props => props.theme.font.size.smallest};
+  `,
+  FooterSignature: Styled.div`
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  font-size: ${props => props.theme.font.size.micro};
+  `,
+  Link: Styled.a`
+  display: flex;
+  margin: 0 3px;
+
+  &:visited, :link, :active {
+    text-decoration: none;
+    color: ${props => props.theme.colors.black};
+  }
+  `,
+  Icon: Styled(FontAwesomeIcon)`
+  display: flex;
+  width: 30px;
+  height: 30px;
+  margin: 0 5px;
+  `,
+  IconBigger: Styled(FontAwesomeIcon)`
+  display: flex;
+  width: 40px;
+  height: 40px;
+  margin: 0 5px;
   `,
   Details: Styled(ReactModal)`
   display: flex;
-  width: 75%;
-  height: 75%;
+  width: 400px;
+  height: 400px;
   flex-direction: column;
   justify-content: space-between;
   align-items: space-between;
@@ -191,7 +329,7 @@ const Home = {
   font-size: ${props => props.theme.font.size.smaller};
   `,
   Search: Styled.button`
-  margin-top: 20px;
+  margin: 20px 0;
   text-transform: uppercase;
   cursor: pointer;
   display: inline-block;
@@ -220,28 +358,110 @@ const Home = {
   display: flex;
   width: 100%;
   `,
-  PrefabsWrapper: Styled.div`
+  PrefabsWrapper: Styled.div<PrefabRowProps>`
+  position: relative;
   display: flex;
   width: 90%;
   flex-direction: column;
   flex-wrap: wrap;
   justify-content: center;
-  margin-bottom: 50px;
+  align-items: center;
+  margin-bottom: ${props => props.isActive ? '50px' : '0'};
+
+  &:not(:last-of-type) {
+    border-bottom: 1px solid ${props => props.theme.colors.black};
+  }
   `,
-  PrefabsTypeTitle: Styled.h2`
+  PrefabsPackWrapper: Styled.div<PrefabRowProps>`
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  height: 50px;
+  justify-content: space-between;
+  cursor: pointer;
+  align-items: center;
+
+  ${props => props.isActive && css`
+  `}
+  `,
+  PrefabsTypeTitle: Styled.h3`
   display: flex;
   color: ${props => props.theme.colors.black};
-  margin-bottom: 20px;
+  margin: 0;
   align-self: center;
+  cursor: pointer;
   `,
-  PrefabsRow: Styled.div`
+  PrefabsTypeChevron: Styled.div<PrefabRowProps>`
+  display: flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s;
+  transform-origin: center;
+  transform: rotate(${props => props.isActive ? '0deg' : '180deg'});
+  `,
+  PrefabsRow: Styled.div<PrefabRowProps>`
   display: flex;
   width: 100%;
   flex-direction: row;
+  height: 0;
   flex-wrap: wrap;
-  justify-content: center;
+  justify-content: flex-start;
+  overflow: hidden;
+  transition: all .2s;
+  position: relative;
+  align-items: center;
+
+  ${props => props.isActive && css`
+    height: auto;
+  `}
   `,
-  PrefabBox: Styled.div<PrefabProps>`
+  PrefabArrow: Styled.div<PrefabArrowProps>`
+  position: absolute;
+  cursor: pointer;
+  width: 40px;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1001;
+  height: 0;
+  overflow: hidden;
+  bottom: 50px;
+
+  ${props => props.isLeft && css`
+    left: -15px;
+  `};
+
+  ${props => !props.isLeft && css`
+    right: -15px;
+  `};
+
+  .arrow {
+    display: flex;
+    color: #fff;
+    font-size: 44px;
+  }
+
+  ${props => props.isDisabled && css`
+    cursor: default;
+      .arrow {
+        color: #000; 
+      }
+  `};
+
+  ${props => !props.isDisabled && css`
+    &: hover {
+      background: rgba(0, 0, 0, 0.8);
+    }
+  `};
+
+  ${props => props.isActive && css`
+    height: calc(0.9 * 200px);
+  `}
+  `,
+  PrefabBox: Styled.a<PrefabProps>`
   display: flex;
   width: 200px;
   height: 250px;
@@ -254,18 +474,36 @@ const Home = {
   border-radius: 5px;
   cursor: pointer;
   transition: all .2s;
+  color: ${props => props.theme.colors.black};
+  text-decoration: none;
 
   &:hover {
-    filter: drop-shadow(0 0 0.75rem ${props => props.theme.colors.yellow});
+    filter: drop-shadow(0 0 0.75rem ${props => props.theme.colors.black});
 
-    a {
-      color: ${props => props.theme.colors.yellow};
+    > .links {
+      display: flex;
     }
   }
 
+  &:visited, :active {
+    text-decoration: none;
+    color: ${props => props.theme.colors.black};
+  }
+
   ${props => props.isActive && css`
-    filter: drop-shadow(0 0 0.75rem ${props => props.theme.colors.yellow});
+    filter: drop-shadow(0 0 0.75rem ${props => props.theme.colors.black});
   `};
+  `,
+  PrefabLinksWrapper: Styled.div`
+  display: none;
+  width: 100%;
+  height: 50px;
+  position: absolute;
+  align-items: center;
+  justify-content: flex-end;
+  top: 0;
+  right: 0;
+  flex-direction: row;
   `,
   PrefabMetaData: Styled.div`
   display: flex;
@@ -280,26 +518,12 @@ const Home = {
   align-items: flex-end;
   justify-content: flex-end;
   `,
-  PrefabPackLink: Styled.a`
-  display: flex;
-  text-decoration: none;
-  color: ${props => props.theme.colors.black};
-  transition: all .2s;
-
-  &:visited, :active {
-    text-decoration: none;
-    color: ${props => props.theme.colors.black};
-  }
-
-  &:hover {
-    color: ${props => props.theme.colors.yellow};
-  }
-  `,
   Loader: Styled.div`
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  height: 100%;
   `,
   Logo: Styled.img<LoaderProps>`
   width: 60px;
@@ -307,7 +531,7 @@ const Home = {
   margin-bottom: 15px;
 
   ${props => props.fetching && css`
-  animation: rotateY 1.5s infinite;
+    animation: rotateY 1.5s infinite;
   `}
   `
 }

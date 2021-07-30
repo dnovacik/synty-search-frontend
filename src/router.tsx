@@ -8,7 +8,7 @@ import Home from './views/Home'
 export const MainRouter = (): JSX.Element => {
   return (
     <>
-      <Route path="/" component={Home} exact />
+      <Route path="/:searchParam?" component={Home} />
     </>
   )
 }

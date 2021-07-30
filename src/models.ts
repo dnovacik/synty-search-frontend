@@ -15,3 +15,11 @@ export interface IPrefab {
   packStoreUrl: string
   keywords: Array<string>
 }
+
+export interface PrefabsWrapper {
+  [key: string]: {
+    prefabs: Array<IPrefab>
+    active: boolean
+    page: number
+  }
+}
