@@ -3,7 +3,8 @@ export default {
     background: '#ffffff',
     yellow: '#f8dc41',
     brown: '#F2994A',
-    black: '#000000'
+    black: '#000000',
+    error: 'red'
   },
   font: {
     familyRegular: 'Montserrat',

@@ -5,9 +5,10 @@ import ReactModal from 'react-modal'
 import { SwitchTransition, CSSTransition } from 'react-transition-group'
 import Styled, { css } from 'styled-components'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faHeart, faCoffee, faChevronDown, /*faExternalLinkAlt, faSlidersH */} from '@fortawesome/free-solid-svg-icons'
+import { faHeart, faCoffee, faChevronDown, /*faExternalLinkAlt, faSlidersH */ } from '@fortawesome/free-solid-svg-icons'
 import { IPrefab } from '../../models';
 import { getPrefabs, groupPrefabs } from '../../services/prefabService'
+import { isQueryCorrectLength } from '../../services/utilsService'
 
 import logo from './../../assets/logo.png'
 
@@ -30,12 +31,25 @@ interface LoaderProps {
   fetching: boolean
 }
 
+interface ErrorStateProps {
+ hasError: boolean 
+}
+
 interface PrefabsWrapper {
   [key: string]: {
     prefabs: Array<IPrefab>
     active: boolean
     page: number
   }
+}
+
+
+
+const ALLOWED_CHARS_REGEX = /^[a-zA-Z(\"\'\s)]+$/
+
+const DEFAULT_ERROR_STATE = {
+  hasError: false,
+  errorMessage: ''
 }
 
 ReactModal.setAppElement('#root')
@@ -46,6 +60,7 @@ const HomeView = (): JSX.Element => {
   const [isFetching, setIsFetching] = useState<boolean>(false)
   const [prefabs, setPrefabs] = useState<PrefabsWrapper | null>(null)
   const [activePrefab, setActivePrefab] = useState<IPrefab | null>(null)
+  const [errorState, setErrorState] = useState<{ hasError: boolean, errorMessage: string}>(DEFAULT_ERROR_STATE)
 
   useEffect(() => {
     if (query) {
@@ -54,37 +69,56 @@ const HomeView = (): JSX.Element => {
   }, [searchParam])
 
   const handleSearchClicked = async () => {
+    if (!query) {
+      return
+    }
+
     setActivePrefab(null)
     setIsFetching(true)
 
-    if (query) {
-      if (query.length < 3) {
-        handleQueryTooShort()
-      } else {
-        const response = await getPrefabs(query)
+    const correctLength = isQueryCorrectLength(query)
 
-        if (response.data) {
-          if (response.data.success) {
-            setPrefabs(groupPrefabs(response.data.data))
-          } else {
-            handleQueryTooShort()
-          }
-        }
+    if (correctLength) {
+      const response = await getPrefabs(query)
+
+      if (response.data && response.data.success) {
+        setPrefabs(groupPrefabs(response.data.data))
+      } else {
+        handleNetworkError()
       }
+    } else {
+      handleQueryTooShort()
     }
 
     setIsFetching(false)
   }
 
   const handleQueryTooShort = () => {
-    console.log('Minimum characters for a query is 3')
+    setErrorState({ hasError: true, errorMessage: 'Minimum characters for a query is 3' })
+  }
+
+  const handleNetworkError = () => {
+    setErrorState({ hasError: true, errorMessage: 'There was an error with your request, please try again later' })
   }
 
   const onKeyPressedSearch = (event: React.KeyboardEvent<HTMLInputElement>) => {
-    if (event.code == 'Enter') {
+    if (event.key == 'Enter') {
       handleSearchClicked()
       event.currentTarget.blur()
+    } else if (!event.key.match(ALLOWED_CHARS_REGEX)) {
+      event.preventDefault()
     }
+  }
+
+  const onInputChanged = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const correctLength = isQueryCorrectLength(event.currentTarget.value)
+    if (!correctLength) {
+      handleQueryTooShort()
+    } else {
+      setErrorState({ hasError: false, errorMessage: '' })
+    }
+
+    setQuery(event.currentTarget.value)
   }
 
   const togglePrefabPack = (pack: string) => {
@@ -121,7 +155,7 @@ const HomeView = (): JSX.Element => {
                   value.prefabs.map((prefab, index) =>
                     <Home.PrefabBox href={prefab.packStoreUrl} target='_blank' key={`prefab-${index}`} isActive={activePrefab === prefab}
                       imagePath={`http://localhost:4040/${prefab.imagePath}`}>
-                        {/* <Home.PrefabLinksWrapper className='links'>
+                      {/* <Home.PrefabLinksWrapper className='links'>
                           <Home.Icon icon={faSlidersH} onClick={activePrefab === prefab ? () => setActivePrefab(null) : () => setActivePrefab(prefab)}/>
                           <Home.Link >
                             <Home.IconBigger icon={faExternalLinkAlt} size='lg' />
@@ -147,7 +181,15 @@ const HomeView = (): JSX.Element => {
     <Home.Layout>
       <Home.Top>
         <Home.Title>Synty Search</Home.Title>
-        <Home.Input value={query} onChange={(e) => setQuery(e.currentTarget.value)} onKeyUp={(e) => onKeyPressedSearch(e)}></Home.Input>
+        <Home.Input
+          value={query}
+          hasError={errorState.hasError}
+          onChange={(e) => onInputChanged(e)}
+          onKeyDown={(e) => onKeyPressedSearch(e)} />
+          {
+            errorState.hasError &&
+            <Home.InputError>{errorState.errorMessage}</Home.InputError>
+          }
         <Home.Search onClick={() => handleSearchClicked()}>Search</Home.Search>
       </Home.Top>
       <Home.Bottom>
@@ -168,7 +210,7 @@ const HomeView = (): JSX.Element => {
       </Home.Bottom>
       <Home.Footer>
         <Home.FooterRow>
-          by community to community
+          by community for community
         </Home.FooterRow>
         {/* <Home.FooterRow>
           you can show me some <Home.Icon icon={faHeart} /> and buy me a
@@ -179,8 +221,10 @@ const HomeView = (): JSX.Element => {
         <Home.FooterSignature>
           made with <Home.Icon icon={faHeart} color='red' /> by
           <Home.Link href={'https://cognision.eu'} target='_blank'>@ra6e</Home.Link>
-          {' & '} 
+          {' & '}
           <Home.Link href={'https://twitter.com/MegaMileyMakes'} target='_blank'>@MegaMiley</Home.Link>
+          {' & '}
+          <Home.Link href={'https://gamedevbits.com/'} target='_blank'>@Timps</Home.Link>
         </Home.FooterSignature>
       </Home.Footer>
       {
@@ -321,12 +365,29 @@ const Home = {
   display: flex;
   color: ${props => props.theme.colors.black};
   `,
-  Input: Styled.input`
+  Input: Styled.input<ErrorStateProps>`
   display: flex;
   width: 250px;
   height: 35px;
   border-radius: 5px;
   font-size: ${props => props.theme.font.size.smaller};
+  outline: none;
+
+  &:focus, :active, :focus-within, :focus-visible {
+    border-color: ${props => props.hasError ? props.theme.colors.error : props.theme.colors.black};
+    outline: none;
+  }
+
+  ${props => props.hasError && css`
+    border-color: ${props => props.theme.colors.error};
+    color: ${props => props.theme.colors.error};
+    outline: none;
+  `}
+  `,
+  InputError: Styled.span`
+  display: flex;
+  font-size: ${props => props.theme.font.size.smallest};
+  color: ${props => props.theme.colors.error};
   `,
   Search: Styled.button`
   margin: 20px 0;
