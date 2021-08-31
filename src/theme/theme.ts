@@ -26,4 +26,10 @@ export default {
     small: 15,
     tiny: 10,
   },
+  screenSizes: {
+    mobile: '(max-width: 425px)',
+    tablet: '(max-width: 768px)',
+    laptop: '(max-width: 1440px)',
+    desktop: '(min-width: 1441px)',
+  }
 }

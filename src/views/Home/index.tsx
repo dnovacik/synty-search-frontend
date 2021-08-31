@@ -5,7 +5,7 @@ import ReactModal from 'react-modal'
 import { SwitchTransition, CSSTransition } from 'react-transition-group'
 import Styled, { css } from 'styled-components'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faHeart, faCoffee, faChevronDown, /*faExternalLinkAlt, faSlidersH */ } from '@fortawesome/free-solid-svg-icons'
+import { faHeart, /*faCoffee,*/ faChevronDown, /*faExternalLinkAlt, faSlidersH */ } from '@fortawesome/free-solid-svg-icons'
 import { IPrefab } from '../../models';
 import { getPrefabs, groupPrefabs } from '../../services/prefabService'
 import { isQueryCorrectLength } from '../../services/utilsService'
@@ -553,7 +553,15 @@ const Home = {
 
   ${props => props.isActive && css`
     filter: drop-shadow(0 0 0.75rem ${props => props.theme.colors.black});
-  `};
+  `}
+
+  @media only screen and ${props => props.theme.screenSizes.mobile} {
+    width: 90%;
+    margin: auto;
+    margin-bottom: 30px;
+    background-size: contain;
+    background-position: center;
+  }
   `,
   PrefabLinksWrapper: Styled.div`
   display: none;
