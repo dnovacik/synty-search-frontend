@@ -1,5 +1,5 @@
 export interface SearchResponse extends IBaseResponse {
-  data: Array<IPrefab>
+  data: PrefabsWrapper
 }
 
 export interface IBaseResponse {
@@ -9,17 +9,21 @@ export interface IBaseResponse {
 
 export interface IPrefab {
   name: string
-  pack: string
   type: string
   imagePath: string
   packStoreUrl: string
   keywords: Array<string>
 }
 
-export interface PrefabsWrapper {
-  [key: string]: {
-    prefabs: Array<IPrefab>
-    active: boolean
-    page: number
-  }
+export interface IPack {
+  name: string
+  identifier: string
+  category: Array<string>
 }
+
+export interface Category {
+  name: string
+}
+
+export type PrefabsWrapper = Record<string, { pack: IPack, prefabs: Array<IPrefab>, active: boolean }>
+export type Categories = { active: Category | null, categories: Array<Category> } 

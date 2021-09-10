@@ -5,9 +5,9 @@ import ReactModal from 'react-modal'
 import { SwitchTransition, CSSTransition } from 'react-transition-group'
 import Styled, { css } from 'styled-components'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
-import { faHeart, /*faCoffee,*/ faChevronDown, /*faExternalLinkAlt, faSlidersH */ } from '@fortawesome/free-solid-svg-icons'
-import { IPrefab } from '../../models';
-import { getPrefabs, groupPrefabs } from '../../services/prefabService'
+import { faHeart, /*faCoffee,*/ faChevronDown, faPlus, faMinus /*faExternalLinkAlt, faSlidersH */ } from '@fortawesome/free-solid-svg-icons'
+import { IPrefab, PrefabsWrapper, Categories, Category } from '../../models';
+import { getPrefabs, getCategories } from '../../services/prefabService'
 import { isQueryCorrectLength } from '../../services/utilsService'
 
 import logo from './../../assets/logo.png'
@@ -17,7 +17,7 @@ interface PrefabProps {
   isActive: boolean
 }
 
-interface PrefabRowProps {
+interface IsActiveProps {
   isActive: boolean
 }
 
@@ -32,18 +32,8 @@ interface LoaderProps {
 }
 
 interface ErrorStateProps {
- hasError: boolean 
+  hasError: boolean
 }
-
-interface PrefabsWrapper {
-  [key: string]: {
-    prefabs: Array<IPrefab>
-    active: boolean
-    page: number
-  }
-}
-
-
 
 const ALLOWED_CHARS_REGEX = /^[a-zA-Z(\"\'\s)]+$/
 
@@ -59,14 +49,27 @@ const HomeView = (): JSX.Element => {
   const [query, setQuery] = useState<string>(searchParam || '')
   const [isFetching, setIsFetching] = useState<boolean>(false)
   const [prefabs, setPrefabs] = useState<PrefabsWrapper | null>(null)
+  const [filteredPrefabs, setFilteredPrefabs] = useState<PrefabsWrapper | null>(null)
+  const [categoriesShown, setCategoriesShown] = useState<boolean>(false)
+  const [categories, setCategories] = useState<Categories | null>(null)
   const [activePrefab, setActivePrefab] = useState<IPrefab | null>(null)
-  const [errorState, setErrorState] = useState<{ hasError: boolean, errorMessage: string}>(DEFAULT_ERROR_STATE)
+  const [errorState, setErrorState] = useState<{ hasError: boolean, errorMessage: string }>(DEFAULT_ERROR_STATE)
 
   useEffect(() => {
     if (query) {
       handleSearchClicked()
     }
   }, [searchParam])
+
+  useEffect(() => {
+    if (prefabs && categories) {
+      if (categories.active) {
+        setFilteredPrefabs(Object.fromEntries(Object.entries(prefabs).filter(([key, value]) => value.pack.category.some(c => c === categories.active?.name))))
+      } else {
+        setFilteredPrefabs(prefabs)
+      }
+    }
+  }, [categories])
 
   const handleSearchClicked = async () => {
     if (!query) {
@@ -82,7 +85,11 @@ const HomeView = (): JSX.Element => {
       const response = await getPrefabs(query)
 
       if (response.data && response.data.success) {
-        setPrefabs(groupPrefabs(response.data.data))
+        const categories = getCategories(response.data.data)
+
+        setCategories(categories)
+        setPrefabs(response.data.data)
+        setFilteredPrefabs(response.data.data)
       } else {
         handleNetworkError()
       }
@@ -130,6 +137,20 @@ const HomeView = (): JSX.Element => {
     }
   }
 
+  const toggleCategory = (category: Category) => {
+    if (categories) {
+      const edited = { ...categories }
+
+      if (category !== categories.active) {
+        edited.active = category
+      } else {
+        edited.active = null
+      }
+
+      setCategories(edited)
+    }
+  }
+
   const renderLoader = () => {
     return (
       <Home.Loader>
@@ -141,37 +162,59 @@ const HomeView = (): JSX.Element => {
   const renderPrefabs = () => {
     return (
       <>
-        {prefabs &&
-          Object.entries(prefabs).map(([key, value]) =>
-            <Home.PrefabsWrapper key={`wrapper-${key}`} isActive={value.active}>
-              <Home.PrefabsPackWrapper isActive={value.active} onClick={() => togglePrefabPack(key)}>
-                <Home.PrefabsTypeTitle>{`${key} (${value.prefabs.length})`}</Home.PrefabsTypeTitle>
-                <Home.PrefabsTypeChevron isActive={value.active}>
-                  <Home.Icon icon={faChevronDown} />
-                </Home.PrefabsTypeChevron>
-              </Home.PrefabsPackWrapper>
-              <Home.PrefabsRow isActive={value.active}>
+        {filteredPrefabs && categories &&
+          <>
+            <Home.Left>
+              <Home.CategoriesWrapper>
+                <Home.CategoriesTitle onClick={() => setCategoriesShown(!categoriesShown)}>
+                  Category
+                  {categoriesShown ? <Home.Icon icon={faMinus} /> : <Home.Icon icon={faPlus} />}
+                </Home.CategoriesTitle>
                 {
-                  value.prefabs.map((prefab, index) =>
-                    <Home.PrefabBox href={prefab.packStoreUrl} target='_blank' key={`prefab-${index}`} isActive={activePrefab === prefab}
-                      imagePath={`http://localhost:4040/${prefab.imagePath}`}>
-                      {/* <Home.PrefabLinksWrapper className='links'>
-                          <Home.Icon icon={faSlidersH} onClick={activePrefab === prefab ? () => setActivePrefab(null) : () => setActivePrefab(prefab)}/>
-                          <Home.Link >
-                            <Home.IconBigger icon={faExternalLinkAlt} size='lg' />
-                          </Home.Link>
-                        </Home.PrefabLinksWrapper> */}
-                      <Home.PrefabMetaData>
-                        <span>{prefab.type}</span>
-                        <span>{prefab.name}</span>
-                        <span>{prefab.pack}</span>
-                      </Home.PrefabMetaData>
-                    </Home.PrefabBox>
+                  categoriesShown &&
+                  categories.categories.map((category, index) =>
+                    <Home.CategoryWrapper key={`category-wrapper-${index}`}>
+                      <Home.CategoryLabel isActive={category.name === categories.active?.name} key={`category-label-${index}`} onClick={() => toggleCategory(category)}>{category.name}</Home.CategoryLabel>
+                    </Home.CategoryWrapper>
                   )
                 }
-              </Home.PrefabsRow>
-            </Home.PrefabsWrapper>
-          )
+              </Home.CategoriesWrapper>
+            </Home.Left>
+            <Home.Right>
+              {
+                Object.entries(filteredPrefabs).map(([key, value]) =>
+                  <Home.PrefabsWrapper key={`wrapper-${key}`} isActive={value.active}>
+                    <Home.PrefabsPackWrapper isActive={value.active} onClick={() => togglePrefabPack(key)}>
+                      <Home.PrefabsTypeTitle>{`${value.pack.name} (${value.prefabs.length})`}</Home.PrefabsTypeTitle>
+                      <Home.PrefabsTypeChevron isActive={value.active}>
+                        <Home.Icon icon={faChevronDown} />
+                      </Home.PrefabsTypeChevron>
+                    </Home.PrefabsPackWrapper>
+                    <Home.PrefabsRow isActive={value.active}>
+                      {
+                        value.prefabs.map((prefab, index) =>
+                          <Home.PrefabBox href={prefab.packStoreUrl} target='_blank' key={`prefab-${index}`} isActive={activePrefab === prefab}
+                            imagePath={`http://localhost:4080/${prefab.imagePath}`}>
+                            {/* <Home.PrefabLinksWrapper className='links'>
+                                      <Home.Icon icon={faSlidersH} onClick={activePrefab === prefab ? () => setActivePrefab(null) : () => setActivePrefab(prefab)}/>
+                                      <Home.Link >
+                                        <Home.IconBigger icon={faExternalLinkAlt} size='lg' />
+                                      </Home.Link>
+                                    </Home.PrefabLinksWrapper> */}
+                            <Home.PrefabMetaData>
+                              <span>{prefab.type}</span>
+                              <span>{prefab.name}</span>
+                              <span>{value.pack.name}</span>
+                            </Home.PrefabMetaData>
+                          </Home.PrefabBox>
+                        )
+                      }
+                    </Home.PrefabsRow>
+                  </Home.PrefabsWrapper>
+                )
+              }
+            </Home.Right>
+          </>
         }
       </>
     )
@@ -186,10 +229,10 @@ const HomeView = (): JSX.Element => {
           hasError={errorState.hasError}
           onChange={(e) => onInputChanged(e)}
           onKeyDown={(e) => onKeyPressedSearch(e)} />
-          {
-            errorState.hasError &&
-            <Home.InputError>{errorState.errorMessage}</Home.InputError>
-          }
+        {
+          errorState.hasError &&
+          <Home.InputError>{errorState.errorMessage}</Home.InputError>
+        }
         <Home.Search onClick={() => handleSearchClicked()}>Search</Home.Search>
       </Home.Top>
       <Home.Bottom>
@@ -239,7 +282,7 @@ const HomeView = (): JSX.Element => {
           </Home.DetailsRow>
           <Home.DetailsRow>
             <Home.DetailsHeader>Pack Name:</Home.DetailsHeader>
-            <Home.DetailsValue>{activePrefab.pack}</Home.DetailsValue>
+            {/* <Home.DetailsValue>{activePrefab.pack}</Home.DetailsValue> */}
           </Home.DetailsRow>
           <Home.DetailsRow>
             <Home.DetailsHeader>Prefab Type:</Home.DetailsHeader>
@@ -278,11 +321,50 @@ const Home = {
   display: flex;
   width: 100%;
   height: calc(100vh - 325px);
-  overflow-y: scroll;
   transition: all .2s;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   margin-bottom: 125px;
+  `,
+  Left: Styled.div`
+  display: flex;
+  flex-direction: column;
+  width: 20%;
+  height: 100%;
+  `,
+  CategoriesWrapper: Styled.div`
+  display: flex;
+  flex-direction: column;
+  margin: 10px;
+  `,
+  CategoryWrapper: Styled.div`
+  display: flex;
+  flex-direction: row;
+  `,
+  CategoriesTitle: Styled.div`
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  font-size: ${props => props.theme.font.size.small};
+  font-weight: 500;
+  cursor: pointer;
+  `,
+  CategoryLabel: Styled.label<IsActiveProps>`
+  display: flex;
+  font-size: ${props => props.theme.font.size.smallest};
+  cursor: pointer;
+  margin-left: 10px;
+
+  ${props => props.isActive && css`
+    font-weight: 600;
+  `}
+  `,
+  Right: Styled.div`
+  display: flex;
+  flex-direction: column;
+  width: 80%;
+  height: 100%;
+  overflow-y: scroll;
   `,
   Footer: Styled.div`
   display: flex;
@@ -419,7 +501,7 @@ const Home = {
   display: flex;
   width: 100%;
   `,
-  PrefabsWrapper: Styled.div<PrefabRowProps>`
+  PrefabsWrapper: Styled.div<IsActiveProps>`
   position: relative;
   display: flex;
   width: 90%;
@@ -433,7 +515,7 @@ const Home = {
     border-bottom: 1px solid ${props => props.theme.colors.black};
   }
   `,
-  PrefabsPackWrapper: Styled.div<PrefabRowProps>`
+  PrefabsPackWrapper: Styled.div<IsActiveProps>`
   display: flex;
   flex-direction: row;
   width: 100%;
@@ -452,7 +534,7 @@ const Home = {
   align-self: center;
   cursor: pointer;
   `,
-  PrefabsTypeChevron: Styled.div<PrefabRowProps>`
+  PrefabsTypeChevron: Styled.div<IsActiveProps>`
   display: flex;
   width: 30px;
   height: 30px;
@@ -462,7 +544,7 @@ const Home = {
   transform-origin: center;
   transform: rotate(${props => props.isActive ? '0deg' : '180deg'});
   `,
-  PrefabsRow: Styled.div<PrefabRowProps>`
+  PrefabsRow: Styled.div<IsActiveProps>`
   display: flex;
   width: 100%;
   flex-direction: row;
