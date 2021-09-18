@@ -13,7 +13,6 @@ import { MultiSelect } from 'react-multi-select-component'
 import { AxiosResponse } from 'axios'
 
 import logo from './../../assets/logo.png'
-import theme from '../../theme/theme'
 
 type OptionType = InstanceType<typeof Option>;
 
