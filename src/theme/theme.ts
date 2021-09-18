@@ -4,6 +4,7 @@ export default {
     yellow: '#f8dc41',
     brown: '#F2994A',
     black: '#000000',
+    grey: '#ababab',
     error: 'red'
   },
   font: {
