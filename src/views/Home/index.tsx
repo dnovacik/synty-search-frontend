@@ -6,11 +6,15 @@ import { SwitchTransition, CSSTransition } from 'react-transition-group'
 import Styled, { css } from 'styled-components'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faHeart, /*faCoffee,*/ faChevronDown, faPlus, faMinus /*faExternalLinkAlt, faSlidersH */ } from '@fortawesome/free-solid-svg-icons'
-import { IPrefab, PrefabsWrapper, Categories, Category } from '../../models';
-import { getPrefabs, getCategories } from '../../services/prefabService'
+import { IPrefab, PrefabsWrapper, Categories, Category, SearchResponse } from '../../models'
+import { getPrefabs, getCategories, getPacks } from '../../services/prefabService'
 import { isQueryCorrectLength } from '../../services/utilsService'
+import { MultiSelect } from 'react-multi-select-component'
+import { AxiosResponse } from 'axios'
 
 import logo from './../../assets/logo.png'
+
+type OptionType = InstanceType<typeof Option>
 
 interface PrefabProps {
   imagePath: string
@@ -19,6 +23,10 @@ interface PrefabProps {
 
 interface IsActiveProps {
   isActive: boolean
+}
+
+interface IsSelectedProps {
+  isSelected: boolean
 }
 
 interface PrefabArrowProps {
@@ -42,6 +50,9 @@ const DEFAULT_ERROR_STATE = {
   errorMessage: ''
 }
 
+const POLYGON_PREFIX_LENGTH = 7
+const PACK_SELECTION_LOCAL_STORAGE_KEY = 'packSelection'
+
 ReactModal.setAppElement('#root')
 
 const HomeView = (): JSX.Element => {
@@ -54,6 +65,10 @@ const HomeView = (): JSX.Element => {
   const [categories, setCategories] = useState<Categories | null>(null)
   const [activePrefab, setActivePrefab] = useState<IPrefab | null>(null)
   const [errorState, setErrorState] = useState<{ hasError: boolean, errorMessage: string }>(DEFAULT_ERROR_STATE)
+  const [selectedPacks, setSelectedPacks] = useState<Array<OptionType>>([])
+  const [filteredPackIdentifiers, setFilteredPackIdentifiers] = useState<Array<string>>([])
+  const [packNames, setPackNames] = useState<Array<OptionType>>([])
+  const [cachedResponse, setCachedResponse] = useState<AxiosResponse<SearchResponse>>()
 
   useEffect(() => {
     if (query) {
@@ -71,6 +86,67 @@ const HomeView = (): JSX.Element => {
     }
   }, [categories])
 
+  useEffect(() => {
+    handleGetPacks()
+  }, [])
+
+  useEffect(() => {
+    displayFilteredPacks()
+  }, [selectedPacks])
+
+  const handleGetPacks = async () => {
+    const packs = await getPacks()
+
+    if (packs.data.success) {
+      setPackNames(packs.data.data.map<OptionType>((elem) => {
+        return {
+          label: elem.name.substring(POLYGON_PREFIX_LENGTH),
+          value: elem.identifier
+        } as OptionType
+      }, packNames))
+
+      const previousSelection = localStorage.getItem(PACK_SELECTION_LOCAL_STORAGE_KEY)
+
+      if (previousSelection) {
+        setSelectedPacks(JSON.parse(previousSelection))
+      }
+    }
+  }
+
+  const handlePackSelectionChanges = (selection: Array<OptionType>) => {
+    setSelectedPacks(selection)
+    localStorage.setItem(PACK_SELECTION_LOCAL_STORAGE_KEY, JSON.stringify(selection))
+  }
+
+  const getFilteredPacks = () => {
+    const packs = selectedPacks.map(x => x['value'])
+    const filteredPacks: PrefabsWrapper = {}
+    const remainingPacks: PrefabsWrapper = {}
+
+    Object.values(cachedResponse!.data.data).forEach((elem) => {
+      packs.includes(elem.pack.identifier)
+        ? filteredPacks[elem.pack.identifier] = elem
+        : remainingPacks[elem.pack.identifier] = elem
+    })
+
+    return [
+      { ...filteredPacks, ...remainingPacks },
+      filteredPacks
+    ]
+  }
+
+  const displayFilteredPacks = () => {
+    if (!cachedResponse) {
+      return
+    }
+
+    const [combinedPacks, filteredPacks] = getFilteredPacks()
+    setFilteredPackIdentifiers(Object.keys(filteredPacks))
+
+    setPrefabs(combinedPacks)
+    setFilteredPrefabs(combinedPacks)
+  }
+
   const handleSearchClicked = async () => {
     if (!query) {
       return
@@ -83,13 +159,19 @@ const HomeView = (): JSX.Element => {
 
     if (correctLength) {
       const response = await getPrefabs(query)
+      setCachedResponse(response)
 
       if (response.data && response.data.success) {
-        const categories = getCategories(response.data.data)
+        setCategories(getCategories(response.data.data))
 
-        setCategories(categories)
-        setPrefabs(response.data.data)
-        setFilteredPrefabs(response.data.data)
+        if (selectedPacks.length > 0) {
+          displayFilteredPacks()
+        }
+        else {
+          setPrefabs(response.data.data)
+          setFilteredPrefabs(response.data.data)
+        }
+
       } else {
         handleNetworkError()
       }
@@ -119,6 +201,7 @@ const HomeView = (): JSX.Element => {
 
   const onInputChanged = (event: React.ChangeEvent<HTMLInputElement>) => {
     const correctLength = isQueryCorrectLength(event.currentTarget.value)
+
     if (!correctLength) {
       handleQueryTooShort()
     } else {
@@ -185,7 +268,7 @@ const HomeView = (): JSX.Element => {
                 Object.entries(filteredPrefabs).map(([key, value]) =>
                   <Home.PrefabsWrapper key={`wrapper-${key}`} isActive={value.active}>
                     <Home.PrefabsPackWrapper isActive={value.active} onClick={() => togglePrefabPack(key)}>
-                      <Home.PrefabsTypeTitle>{`${value.pack.name} (${value.prefabs.length})`}</Home.PrefabsTypeTitle>
+                      <Home.PrefabsTypeTitle isSelected={selectedPacks.length > 0 ? (filteredPackIdentifiers.includes(value.pack.identifier)) : true}>{`${value.pack.name} (${value.prefabs.length})`}</Home.PrefabsTypeTitle>
                       <Home.PrefabsTypeChevron isActive={value.active}>
                         <Home.Icon icon={faChevronDown} />
                       </Home.PrefabsTypeChevron>
@@ -233,15 +316,23 @@ const HomeView = (): JSX.Element => {
           errorState.hasError &&
           <Home.InputError>{errorState.errorMessage}</Home.InputError>
         }
+        <Home.MultiSelect
+          options={packNames}
+          value={selectedPacks}
+          onChange={handlePackSelectionChanges}
+          labelledBy='Select'
+          isLoading={packNames.length == 0}
+          overrideStrings={{ selectSomeItems: 'All Packs' }}
+        />
         <Home.Search onClick={() => handleSearchClicked()}>Search</Home.Search>
       </Home.Top>
       <Home.Bottom>
-        <Home.SwitchTransition mode="out-in">
+        <Home.SwitchTransition mode='out-in'>
           <Home.Transition
             key={`state-${isFetching}`}
             in={isFetching}
-            classNames="fade"
-            component="div"
+            classNames='fade'
+            component='div'
             timeout={150}>
             {
               isFetching && prefabs
@@ -255,12 +346,6 @@ const HomeView = (): JSX.Element => {
         <Home.FooterRow>
           by community for community
         </Home.FooterRow>
-        {/* <Home.FooterRow>
-          you can show me some <Home.Icon icon={faHeart} /> and buy me a
-          <Home.Link href={'https://www.paypal.com/donate/?business=novacik.daniel%40gmail.com&no_recurring=0&currency_code=EUR'} target='_blank'>
-            <Home.Icon icon={faCoffee} />
-          </Home.Link>
-        </Home.FooterRow> */}
         <Home.FooterSignature>
           made with <Home.Icon icon={faHeart} color='red' /> by
           <Home.Link href={'https://cognision.eu'} target='_blank'>@ra6e</Home.Link>
@@ -291,8 +376,8 @@ const HomeView = (): JSX.Element => {
         </Home.Details>
       }
     </Home.Layout >
-  );
-};
+  )
+}
 
 const Home = {
   Layout: Styled.div`
@@ -493,6 +578,11 @@ const Home = {
     color: ${props => props.theme.colors.black};
   }
   `,
+  MultiSelect: Styled(MultiSelect)`
+  max-width:250px;
+  width: 250px;
+  padding-top: 10px;
+  `,
   SwitchTransition: Styled(SwitchTransition)`
   display: flex;
   width: 100%;
@@ -527,9 +617,9 @@ const Home = {
   ${props => props.isActive && css`
   `}
   `,
-  PrefabsTypeTitle: Styled.h3`
+  PrefabsTypeTitle: Styled.h3<IsSelectedProps>`
   display: flex;
-  color: ${props => props.theme.colors.black};
+  color: ${props => props.isSelected ? props.theme.colors.black : props.theme.colors.grey};
   margin: 0;
   align-self: center;
   cursor: pointer;

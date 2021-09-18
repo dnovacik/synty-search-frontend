@@ -2,6 +2,10 @@ export interface SearchResponse extends IBaseResponse {
   data: PrefabsWrapper
 }
 
+export interface PackResponse extends IBaseResponse {
+  data: Array<IPack>
+}
+
 export interface IBaseResponse {
   success: boolean
   message?: string
@@ -26,4 +30,4 @@ export interface Category {
 }
 
 export type PrefabsWrapper = Record<string, { pack: IPack, prefabs: Array<IPrefab>, active: boolean }>
-export type Categories = { active: Category | null, categories: Array<Category> } 
+export type Categories = { active: Category | null, categories: Array<Category> }
