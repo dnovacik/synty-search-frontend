@@ -6,10 +6,11 @@ import { SwitchTransition, CSSTransition } from 'react-transition-group'
 import Styled, { css } from 'styled-components'
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faHeart, /*faCoffee,*/ faChevronDown, faPlus, faMinus /*faExternalLinkAlt, faSlidersH */ } from '@fortawesome/free-solid-svg-icons'
-import { IPrefab, PrefabsWrapper, Categories, Category } from '../../models';
+import { IPrefab, PrefabsWrapper, Categories, Category, SearchResponse } from '../../models'
 import { getPrefabs, getCategories, getPacks } from '../../services/prefabService'
 import { isQueryCorrectLength } from '../../services/utilsService'
-import { MultiSelect } from "react-multi-select-component";
+import { MultiSelect } from 'react-multi-select-component'
+import { AxiosResponse } from 'axios'
 
 import logo from './../../assets/logo.png'
 import theme from '../../theme/theme'
@@ -23,6 +24,10 @@ interface PrefabProps {
 
 interface IsActiveProps {
   isActive: boolean
+}
+
+interface IsSelectedProps {
+  isSelected: boolean
 }
 
 interface PrefabArrowProps {
@@ -46,6 +51,9 @@ const DEFAULT_ERROR_STATE = {
   errorMessage: ''
 }
 
+const POLYGON_PREFIX_LENGTH = 7
+const PACK_SELECTION_LOCAL_STORAGE_KEY = 'packSelection'
+
 ReactModal.setAppElement('#root')
 
 const HomeView = (): JSX.Element => {
@@ -58,9 +66,10 @@ const HomeView = (): JSX.Element => {
   const [categories, setCategories] = useState<Categories | null>(null)
   const [activePrefab, setActivePrefab] = useState<IPrefab | null>(null)
   const [errorState, setErrorState] = useState<{ hasError: boolean, errorMessage: string }>(DEFAULT_ERROR_STATE)
-  const [selectedValues, setSelectedValues] = useState<OptionType[]>([]);
-  const [filteredPackIdentifiers, setFilteredPackIdentifiers] = useState<string[]>([]);
-  const [packNames, setPackNames] = useState<OptionType[]>([]);
+  const [selectedPacks, setSelectedPacks] = useState<OptionType[]>([])
+  const [filteredPackIdentifiers, setFilteredPackIdentifiers] = useState<string[]>([])
+  const [packNames, setPackNames] = useState<Array<OptionType>>([])
+  const [cachedResponse, setCachedResponse] = useState<AxiosResponse<SearchResponse>>()
 
   useEffect(() => {
     if (query) {
@@ -82,23 +91,54 @@ const HomeView = (): JSX.Element => {
     handleGetPacks();
   }, [])
 
+  useEffect(() => {
+    displayFilteredPacks()
+  }, [selectedPacks])
+
   const handleGetPacks = async () => {
     const packs = await getPacks();
 
     if (packs.data.success) {
       setPackNames(packs.data.data.map<OptionType>((elem) => {
-        return { label: elem.name.substring('Polygon'.length), value: elem.identifier } as OptionType
-      }, packNames));
+        return { label: elem.name.substring(POLYGON_PREFIX_LENGTH), value: elem.identifier } as OptionType
+      }, packNames))
 
-      const previousSelection = localStorage.getItem("packSelection");
+      const previousSelection = localStorage.getItem(PACK_SELECTION_LOCAL_STORAGE_KEY);
+
       if (previousSelection)
-        setSelectedValues(JSON.parse(previousSelection))
+        setSelectedPacks(JSON.parse(previousSelection))
     }
   }
 
   const handlePackSelectionChanges = (selection: OptionType[]) => {
-    setSelectedValues(selection)
-    localStorage.setItem("packSelection", JSON.stringify(selection))
+    setSelectedPacks(selection)
+    localStorage.setItem(PACK_SELECTION_LOCAL_STORAGE_KEY, JSON.stringify(selection))
+  }
+
+  const getFilteredPacks = () => {
+    const packs = selectedPacks.map(x => x['value'])
+    const filteredPacks: PrefabsWrapper = {}
+    const remainingPacks: PrefabsWrapper = {}
+
+    Object.values(cachedResponse!.data.data).
+      forEach((elem) => {
+        packs.includes(elem.pack.identifier) ?
+          filteredPacks[elem.pack.identifier] = elem :
+          remainingPacks[elem.pack.identifier] = elem
+      })
+
+    return [{ ...filteredPacks, ...remainingPacks }, filteredPacks]
+  }
+
+  const displayFilteredPacks = () => {
+    if (!cachedResponse)
+      return
+
+    const [combinedPacks, filteredPacks] = getFilteredPacks();
+    setFilteredPackIdentifiers(Object.keys(filteredPacks))
+
+    setPrefabs(combinedPacks)
+    setFilteredPrefabs(combinedPacks)
   }
 
   const handleSearchClicked = async () => {
@@ -113,31 +153,17 @@ const HomeView = (): JSX.Element => {
 
     if (correctLength) {
       const response = await getPrefabs(query)
+      setCachedResponse(response)
 
       if (response.data && response.data.success) {
         setCategories(getCategories(response.data.data))
 
-        if (selectedValues.length > 0) {
-          const selectedPacks = selectedValues.map(x => x['value'] as string);
-          const filteredPacks: PrefabsWrapper = {};
-          const remainingPacks: PrefabsWrapper = {};
-
-          Object.values(response.data.data).
-            forEach((elem) => {
-              selectedPacks.includes(elem.pack.identifier) ?
-                filteredPacks[elem.pack.identifier] = elem :
-                remainingPacks[elem.pack.identifier] = elem;
-            });
-
-          const combinedPacks = { ...filteredPacks, ...remainingPacks }
-          setFilteredPackIdentifiers(Object.keys(filteredPacks));
-
-          setPrefabs(combinedPacks)
-          setFilteredPrefabs(combinedPacks);
+        if (selectedPacks.length > 0) {
+          displayFilteredPacks()
         }
         else {
           setPrefabs(response.data.data)
-          setFilteredPrefabs(response.data.data);
+          setFilteredPrefabs(response.data.data)
         }
 
       } else {
@@ -235,11 +261,7 @@ const HomeView = (): JSX.Element => {
                 Object.entries(filteredPrefabs).map(([key, value]) =>
                   <Home.PrefabsWrapper key={`wrapper-${key}`} isActive={value.active}>
                     <Home.PrefabsPackWrapper isActive={value.active} onClick={() => togglePrefabPack(key)}>
-                      <Home.PrefabsTypeTitle style={{
-                        color: filteredPackIdentifiers.length > 0 ?
-                          (filteredPackIdentifiers.includes(value.pack.identifier) ? theme.colors.black : theme.colors.grey)
-                          : theme.colors.black
-                      }} >{`${value.pack.name} (${value.prefabs.length})`}</Home.PrefabsTypeTitle>
+                      <Home.PrefabsTypeTitle isSelected={selectedPacks.length > 0 ? (filteredPackIdentifiers.includes(value.pack.identifier)) : true}>{`${value.pack.name} (${value.prefabs.length})`}</Home.PrefabsTypeTitle>
                       <Home.PrefabsTypeChevron isActive={value.active}>
                         <Home.Icon icon={faChevronDown} />
                       </Home.PrefabsTypeChevron>
@@ -289,10 +311,11 @@ const HomeView = (): JSX.Element => {
         }
         <Home.MultiSelect
           options={packNames}
-          value={selectedValues}
+          value={selectedPacks}
           onChange={handlePackSelectionChanges}
-          labelledBy="Select"
-          overrideStrings={{ 'selectSomeItems': "All Packs" }}
+          labelledBy='Select'
+          isLoading={packNames.length == 0}
+          overrideStrings={{ selectSomeItems: 'All Packs' }}
         />
         <Home.Search onClick={() => handleSearchClicked()}>Search</Home.Search>
       </Home.Top>
@@ -593,9 +616,9 @@ const Home = {
   ${props => props.isActive && css`
   `}
   `,
-  PrefabsTypeTitle: Styled.h3`
+  PrefabsTypeTitle: Styled.h3<IsSelectedProps>`
   display: flex;
-  color: ${props => props.theme.colors.black};
+  color: ${props => props.isSelected ? props.theme.colors.black : props.theme.colors.grey};
   margin: 0;
   align-self: center;
   cursor: pointer;
