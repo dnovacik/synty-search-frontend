@@ -58,7 +58,7 @@ const HomeView = (): JSX.Element => {
   const [categories, setCategories] = useState<Categories | null>(null)
   const [activePrefab, setActivePrefab] = useState<IPrefab | null>(null)
   const [errorState, setErrorState] = useState<{ hasError: boolean, errorMessage: string }>(DEFAULT_ERROR_STATE)
-  const [selectedValues, setSelectedValues] = useState([]);
+  const [selectedValues, setSelectedValues] = useState<OptionType[]>([]);
   const [filteredPackIdentifiers, setFilteredPackIdentifiers] = useState<string[]>([]);
   const [packNames, setPackNames] = useState<OptionType[]>([]);
 
@@ -89,7 +89,16 @@ const HomeView = (): JSX.Element => {
       setPackNames(packs.data.data.map<OptionType>((elem) => {
         return { label: elem.name.substring('Polygon'.length), value: elem.identifier } as OptionType
       }, packNames));
+
+      const previousSelection = localStorage.getItem("packSelection");
+      if (previousSelection)
+        setSelectedValues(JSON.parse(previousSelection))
     }
+  }
+
+  const handlePackSelectionChanges = (selection: OptionType[]) => {
+    setSelectedValues(selection)
+    localStorage.setItem("packSelection", JSON.stringify(selection))
   }
 
   const handleSearchClicked = async () => {
@@ -281,7 +290,7 @@ const HomeView = (): JSX.Element => {
         <Home.MultiSelect
           options={packNames}
           value={selectedValues}
-          onChange={setSelectedValues}
+          onChange={handlePackSelectionChanges}
           labelledBy="Select"
           overrideStrings={{ 'selectSomeItems': "All Packs" }}
         />
