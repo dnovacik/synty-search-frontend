@@ -14,7 +14,7 @@ import { AxiosResponse } from 'axios'
 
 import logo from './../../assets/logo.png'
 
-type OptionType = InstanceType<typeof Option>;
+type OptionType = InstanceType<typeof Option>
 
 interface PrefabProps {
   imagePath: string
@@ -65,8 +65,8 @@ const HomeView = (): JSX.Element => {
   const [categories, setCategories] = useState<Categories | null>(null)
   const [activePrefab, setActivePrefab] = useState<IPrefab | null>(null)
   const [errorState, setErrorState] = useState<{ hasError: boolean, errorMessage: string }>(DEFAULT_ERROR_STATE)
-  const [selectedPacks, setSelectedPacks] = useState<OptionType[]>([])
-  const [filteredPackIdentifiers, setFilteredPackIdentifiers] = useState<string[]>([])
+  const [selectedPacks, setSelectedPacks] = useState<Array<OptionType>>([])
+  const [filteredPackIdentifiers, setFilteredPackIdentifiers] = useState<Array<string>>([])
   const [packNames, setPackNames] = useState<Array<OptionType>>([])
   const [cachedResponse, setCachedResponse] = useState<AxiosResponse<SearchResponse>>()
 
@@ -87,7 +87,7 @@ const HomeView = (): JSX.Element => {
   }, [categories])
 
   useEffect(() => {
-    handleGetPacks();
+    handleGetPacks()
   }, [])
 
   useEffect(() => {
@@ -95,21 +95,25 @@ const HomeView = (): JSX.Element => {
   }, [selectedPacks])
 
   const handleGetPacks = async () => {
-    const packs = await getPacks();
+    const packs = await getPacks()
 
     if (packs.data.success) {
       setPackNames(packs.data.data.map<OptionType>((elem) => {
-        return { label: elem.name.substring(POLYGON_PREFIX_LENGTH), value: elem.identifier } as OptionType
+        return {
+          label: elem.name.substring(POLYGON_PREFIX_LENGTH),
+          value: elem.identifier
+        } as OptionType
       }, packNames))
 
-      const previousSelection = localStorage.getItem(PACK_SELECTION_LOCAL_STORAGE_KEY);
+      const previousSelection = localStorage.getItem(PACK_SELECTION_LOCAL_STORAGE_KEY)
 
-      if (previousSelection)
+      if (previousSelection) {
         setSelectedPacks(JSON.parse(previousSelection))
+      }
     }
   }
 
-  const handlePackSelectionChanges = (selection: OptionType[]) => {
+  const handlePackSelectionChanges = (selection: Array<OptionType>) => {
     setSelectedPacks(selection)
     localStorage.setItem(PACK_SELECTION_LOCAL_STORAGE_KEY, JSON.stringify(selection))
   }
@@ -119,21 +123,24 @@ const HomeView = (): JSX.Element => {
     const filteredPacks: PrefabsWrapper = {}
     const remainingPacks: PrefabsWrapper = {}
 
-    Object.values(cachedResponse!.data.data).
-      forEach((elem) => {
-        packs.includes(elem.pack.identifier) ?
-          filteredPacks[elem.pack.identifier] = elem :
-          remainingPacks[elem.pack.identifier] = elem
-      })
+    Object.values(cachedResponse!.data.data).forEach((elem) => {
+      packs.includes(elem.pack.identifier)
+        ? filteredPacks[elem.pack.identifier] = elem
+        : remainingPacks[elem.pack.identifier] = elem
+    })
 
-    return [{ ...filteredPacks, ...remainingPacks }, filteredPacks]
+    return [
+      { ...filteredPacks, ...remainingPacks },
+      filteredPacks
+    ]
   }
 
   const displayFilteredPacks = () => {
-    if (!cachedResponse)
+    if (!cachedResponse) {
       return
+    }
 
-    const [combinedPacks, filteredPacks] = getFilteredPacks();
+    const [combinedPacks, filteredPacks] = getFilteredPacks()
     setFilteredPackIdentifiers(Object.keys(filteredPacks))
 
     setPrefabs(combinedPacks)
@@ -194,6 +201,7 @@ const HomeView = (): JSX.Element => {
 
   const onInputChanged = (event: React.ChangeEvent<HTMLInputElement>) => {
     const correctLength = isQueryCorrectLength(event.currentTarget.value)
+
     if (!correctLength) {
       handleQueryTooShort()
     } else {
@@ -319,12 +327,12 @@ const HomeView = (): JSX.Element => {
         <Home.Search onClick={() => handleSearchClicked()}>Search</Home.Search>
       </Home.Top>
       <Home.Bottom>
-        <Home.SwitchTransition mode="out-in">
+        <Home.SwitchTransition mode='out-in'>
           <Home.Transition
             key={`state-${isFetching}`}
             in={isFetching}
-            classNames="fade"
-            component="div"
+            classNames='fade'
+            component='div'
             timeout={150}>
             {
               isFetching && prefabs
@@ -338,12 +346,6 @@ const HomeView = (): JSX.Element => {
         <Home.FooterRow>
           by community for community
         </Home.FooterRow>
-        {/* <Home.FooterRow>
-          you can show me some <Home.Icon icon={faHeart} /> and buy me a
-          <Home.Link href={'https://www.paypal.com/donate/?business=novacik.daniel%40gmail.com&no_recurring=0&currency_code=EUR'} target='_blank'>
-            <Home.Icon icon={faCoffee} />
-          </Home.Link>
-        </Home.FooterRow> */}
         <Home.FooterSignature>
           made with <Home.Icon icon={faHeart} color='red' /> by
           <Home.Link href={'https://cognision.eu'} target='_blank'>@ra6e</Home.Link>
@@ -374,8 +376,8 @@ const HomeView = (): JSX.Element => {
         </Home.Details>
       }
     </Home.Layout >
-  );
-};
+  )
+}
 
 const Home = {
   Layout: Styled.div`
